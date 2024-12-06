@@ -1,84 +1,80 @@
 package main
 
 import (
+	"fmt"
+	"log"
 	"os"
+	"path/filepath"
 	"strings"
 )
 
-func AsciiArt(input string, font string) string {
-	var output string
-	name_of_file := font
-	if input == "" {
-		return ""
-	}
-	separated := strings.Split(input, "\\n")
-	var result []string
-	var line string
-	var index_in_file int
-	check := find(input)
-	pattern := read_file(name_of_file)
-	if strings.HasPrefix(pattern, "Error reading file:") {
-		return pattern
-	}
-	pattern_lines := strings.Split(pattern, "\n")
-	if name_of_file == "banners/thinkertoy.txt" {
-		removeCarriage(pattern_lines)
-	}
-	size := len(separated)
-	for i := 0; i < size; i++ {
-		if separated[i] == "" {
-			if check && i == 0 {
-				continue
+// ValidInput validates that the input contains only printable ASCII characters and newlines.
+func ValidInput(submittedInput string) (string, bool) {
+	cleanedInput := strings.ReplaceAll(submittedInput, "\r\n", "\n")
+	isValid := true
+	var notvalid string
+	for _, ch := range cleanedInput {
+		// Check if the char is outside the printable ASCII range and is not a newline
+		if (ch < 32 || ch > 126) && ch != '\n' {
+			isValid = false
+			if !strings.ContainsRune(notvalid, ch) {
+				log.Println("non printable ascii character submitted: ", string(ch))
+				notvalid += string(ch) + " "
 			}
-			result = append(result, "\n")
-			continue
-		}
-		for j := 0; j < 8; j++ {
-			line = ""
-			for _, char := range separated[i] {
-				if int(char) < 32 || int(char) > 126 {
-					return "Invalid input"
-				}
-				index_in_file = ((int(char) - 32) * 9) + 1
-				line += pattern_lines[index_in_file+j]
-			}
-			line += "\n"
-			result = append(result, line)
 		}
 	}
-	output = strings.Join(result[:], "")
-	return output
+	if !isValid {
+		return notvalid, false
+	}
+	return cleanedInput, true
 }
 
-func read_file(name_of_file string) string {
-	data, err := os.ReadFile(name_of_file)
+// ReadAndCleanBanner reads the specified banner file and normalizes its line endings.
+func ReadAndCleanBanner(banner string) (string, error) {
+	bannerFilePath := filepath.Join("banners/", banner)
+
+	bannerFile, err := os.ReadFile(bannerFilePath)
+
 	if err != nil {
-		return "Error reading file: " + err.Error()
+		fmt.Printf("ERROR: Couldn't read the banner file %s: %v\n", banner, err)
+		return "", fmt.Errorf("failed to load banner '%s'", banner)
 	}
-	content := string(data)
-	return content
+	cleanBanner := strings.ReplaceAll(string(bannerFile), "\r\n", "\n")
+	return cleanBanner, nil
 }
 
-func find(input string) bool {
-	separated := strings.Split(input, "\\n")
-	for _, str := range separated {
-		if str != "" {
-			return false
-		}
+// AsciiArt generates ASCII art for the given input using the provided banner content.
+func AsciiArt(input, banner string) string {
+	var result string
+	cleanBanner, err := ReadAndCleanBanner(banner)
+	if err != nil {
+		return "Error reading file:" + err.Error()
 	}
-	return true
-}
 
-func removeCarriage(pattern_lines []string) {
-	size := len(pattern_lines)
-	var check_thinkertoy []rune
-	for i := 0; i < size; i++ {
-		check_thinkertoy = nil
-		for _, char := range (pattern_lines)[i] {
-			if int(char) != 13 {
-				check_thinkertoy = append(check_thinkertoy, char)
+	cleanInput, isValid := ValidInput(input)
+	if !isValid {
+		return "Invalid characters are:\n" + cleanInput
+	}
+
+	if len(cleanInput) != 0 {
+		// Split the banner and cleaned input into lines for processing
+		bannerFileLines := strings.Split(string(cleanBanner), "\n")
+		words := strings.Split(cleanInput, "\n")
+
+		// Process each word or line of the input
+		for _, word := range words {
+			if word == "" {
+				result += "\n"
+			} else {
+				// Using two loops to iterate over each line of each char to build the art.
+				for i := 1; i <= 8; i++ {
+					for _, char := range word {
+						result += bannerFileLines[i+(int(char-32)*9)]
+					}
+					result += "\n"
+				}
 			}
 		}
-		(pattern_lines)[i] = string(check_thinkertoy)
 	}
+	return result
 }

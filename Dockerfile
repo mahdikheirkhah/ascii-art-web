@@ -1,24 +1,45 @@
-# Use the official Golang image as a base image
-FROM golang:1.21
+# Build stage
+FROM golang:1.23-alpine AS builder
 
-# Set the working directory inside the container
+# Install build tools
+RUN apk add --no-cache build-base gcc git
+
+# Set working directory
 WORKDIR /app
 
-# Copy the Go module files and download dependencies
 COPY go.mod ./
 RUN go mod download
 
-# Copy the rest of the application code
+# Copies everthing in folder
 COPY . .
 
-# Run tests
+# Build and test
 RUN go test -v ./...
+RUN go build -o ascii-art-web . && chmod +x ascii-art-web
 
-# Build the Go application
-RUN go build -o ascii-art-web .
+# Runtime stage
+FROM alpine:latest
 
-# Expose the port that your web server listens on
+# Metadata
+LABEL project="Ascii-Art-Web Dockerize"
+LABEL maintainer="Toft Diederichs, Fatemeh Kheirkhah, Mahdi Kheirkhah"
+LABEL description="A Dockerized ASCII Art Web Application"
+
+# Install runtime dependencies
+RUN apk add --no-cache ca-certificates bash
+
+# Set working directory
+WORKDIR /app
+
+# Copy built files and assets
+COPY --from=builder /app/ascii-art-web /app/
+COPY --from=builder /app/templates /app/templates
+COPY --from=builder /app/static /app/static
+COPY --from=builder /app/banners /app/banners
+# COPY --from=builder /app/. /app/.
+
+# Expose application port
 EXPOSE 8080
 
-# Command to run the web server
+# Command to start the app
 CMD ["./ascii-art-web"]

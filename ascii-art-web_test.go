@@ -5,6 +5,7 @@ import (
 	"html"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"strings"
 	"testing"
 )
@@ -15,6 +16,7 @@ func TestGetHandler(t *testing.T) {
 		name           string
 		url            string
 		method         string
+		body           string
 		expectedStatus int
 	}{
 		{
@@ -35,12 +37,6 @@ func TestGetHandler(t *testing.T) {
 			method:         http.MethodPost,
 			expectedStatus: http.StatusBadRequest,
 		},
-		// {
-		// 	name:           "Internal Server Error",
-		// 	url:            "/",
-		// 	method:         http.MethodGet,
-		// 	expectedStatus: http.StatusInternalServerError,
-		// },
 	}
 
 	for _, test := range tests {
@@ -49,13 +45,14 @@ func TestGetHandler(t *testing.T) {
 			if err != nil {
 				t.Fatalf("Could not create request: %v", err)
 			}
-			rr := httptest.NewRecorder()
+
+			responseHolder := httptest.NewRecorder()
+
 			handler := http.HandlerFunc(GetHandler)
+			handler.ServeHTTP(responseHolder, req)
 
-			handler.ServeHTTP(rr, req)
-
-			if rr.Code != test.expectedStatus {
-				t.Errorf("Expected status code %d, but got %d", test.expectedStatus, rr.Code)
+			if responseHolder.Code != test.expectedStatus {
+				t.Errorf("Expected status code %d, but got %d", test.expectedStatus, responseHolder.Code)
 			}
 		})
 	}
@@ -73,10 +70,11 @@ func TestPostHandler(t *testing.T) {
 		expectedDivVal string
 	}{
 		{
-			name:           "Valid Input",
-			url:            "/ascii-art",
-			method:         http.MethodPost,
-			formData:       "inputField={123}\\n<Hello> (World)!&banner=standard.txt",
+			name:   "Valid Input",
+			url:    "/ascii-art",
+			method: http.MethodPost,
+			formData: `inputField={123}
+<Hello> (World)!&banner=standard.txt`,
 			expectedStatus: http.StatusOK,
 			expectedDivID:  "response",
 			expectedDivVal: `   __                     __    
@@ -118,7 +116,7 @@ func TestPostHandler(t *testing.T) {
 			name:           "Valid Input3",
 			url:            "/ascii-art",
 			method:         http.MethodPost,
-			formData:       "inputField=%24%25%20%22%3D&banner=shadow.txt",
+			formData:       "inputField=%24%25%20%22%3D&banner=shadow.txt", //$% "=
 			expectedStatus: http.StatusOK,
 			expectedDivID:  "response",
 			expectedDivVal: `                        _|  _|            
@@ -152,34 +150,11 @@ o-o-o o--o o-o          o   o      o   o-o  | |  o   o
 			name:           "Valid Input 5",
 			url:            "/ascii-art",
 			method:         http.MethodPost,
-			formData:       "inputField=Hello\\n\\nthere&banner=standard.txt",
+			formData:       "inputField=Helloäö&banner=standard.txt",
 			expectedStatus: http.StatusOK,
 			expectedDivID:  "response",
-			expectedDivVal: ` _    _          _   _          
-| |  | |        | | | |         
-| |__| |   ___  | | | |   ___   
-|  __  |  / _ \ | | | |  / _ \  
-| |  | | |  __/ | | | | | (_) | 
-|_|  |_|  \___| |_| |_|  \___/  
-                                
-                                
-
- _     _                           
-| |   | |                          
-| |_  | |__     ___   _ __    ___  
-| __| |  _ \   / _ \ | '__|  / _ \ 
-\ |_  | | | | |  __/ | |    |  __/ 
- \__| |_| |_|  \___| |_|     \___| 
-                                   
-                                   
-`,
-		},
-		{
-			name:           "Bad request",
-			url:            "/ascii-art",
-			method:         http.MethodPost,
-			formData:       "inputField=Helloä&banner=standard.txt",
-			expectedStatus: http.StatusBadRequest,
+			expectedDivVal: `Invalid characters are:
+ä ö `,
 		},
 		{
 			name:           "Bad request2",
@@ -202,6 +177,13 @@ o-o-o o--o o-o          o   o      o   o-o  | |  o   o
 			formData:       "inputField=Hello&banner=stand.txt",
 			expectedStatus: http.StatusNotFound,
 		},
+		{
+			name:           "Internal Server Error",
+			url:            "/ascii-art",
+			method:         http.MethodPost,
+			formData:       "inputField=Hello&banner=standard.txt",
+			expectedStatus: http.StatusInternalServerError,
+		},
 	}
 
 	for _, test := range tests {
@@ -209,9 +191,22 @@ o-o-o o--o o-o          o   o      o   o-o  | |  o   o
 			var req *http.Request
 			var err error
 
+			if test.name == "Valid Input" { //first test file which we have to add \r to \n
+				test.formData = strings.ReplaceAll(test.formData, "\n", "\r\n")
+			} else if test.name == "Internal Server Error" { //cahnge the name of the file to have internal server Error
+				sourceName := "./templates/index.html"
+				destinationName := "./templates/home.html"
+				err := os.Rename(sourceName, destinationName)
+				if err != nil {
+					t.Errorf("Error renaming file: %v\n", err)
+					return
+				}
+			}
+
 			if test.method == http.MethodPost {
 				req, err = http.NewRequest(test.method, test.url, strings.NewReader(test.formData))
-				req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+				req.Header.Set("Content-Type", "application/x-www-form-urlencoded") //Content-Type: Specifies the media type (MIME type) of the request body.
+				//application/x-www-form-urlencoded indicates that the body contains form data encoded as key-value pairs(e.g., key1=value1&key2=value2).
 			} else {
 				req, err = http.NewRequest(test.method, test.url, nil)
 			}
@@ -220,25 +215,35 @@ o-o-o o--o o-o          o   o      o   o-o  | |  o   o
 				t.Fatalf("Could not create request: %v", err)
 			}
 
-			rr := httptest.NewRecorder()
+			responseHolder := httptest.NewRecorder()
+
 			handler := http.HandlerFunc(PostHandler)
+			handler.ServeHTTP(responseHolder, req)
 
-			handler.ServeHTTP(rr, req)
-
-			if rr.Code != test.expectedStatus {
-				t.Errorf("Expected status code %d\n, but got\n%d", test.expectedStatus, rr.Code)
+			if responseHolder.Code != test.expectedStatus {
+				t.Errorf("Expected status code %d\n, but got\n%d", test.expectedStatus, responseHolder.Code)
 				//return
 			}
 
 			// Parse the HTML response
-			divVal, err := extractDivValueByID(rr.Body.String(), test.expectedDivID)
-			decodedDivVal := html.UnescapeString(divVal)
-			if err != nil && strings.HasPrefix(test.name, "Valid Input") {
-				t.Fatalf("Error extracting div: %v", err)
+			if strings.HasPrefix(test.name, "Valid Input") { //only for the test cases with name <<valid input>> check for the output
+				divVal, err := extractDivValueByID(responseHolder.Body.String(), test.expectedDivID)
+				decodedDivVal := html.UnescapeString(divVal) //check for unescape chars : < becomes &lt; > becomes &gt; & becomes &amp; " becomes &quot
+				if err != nil {
+					t.Errorf("Error extracting div: %v", err)
+				}
+				if decodedDivVal != test.expectedDivVal {
+					t.Errorf("Expected div #%s to have value %q, but got %q", test.expectedDivID, test.expectedDivVal, divVal)
+				}
 			}
-
-			if decodedDivVal != test.expectedDivVal {
-				t.Errorf("Expected div #%s to have value %q, but got %q", test.expectedDivID, test.expectedDivVal, divVal)
+			if test.name == "Internal Server Error" { //recahnge the name of the file
+				sourceName := "./templates/home.html"
+				destinationName := "./templates/index.html"
+				err := os.Rename(sourceName, destinationName)
+				if err != nil {
+					t.Errorf("Error renaming file: %v\n", err)
+					return
+				}
 			}
 		})
 	}

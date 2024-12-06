@@ -27,6 +27,9 @@
     ├── ascii-art-web.go        # Main application server
     ├── ascii-art.go            # ASCII art logic
     ├── ascii-art-web_test.go   # Test cases
+    ├── Dockerfile
+    ├── build_image_container.sh
+    ├── stop_remove.sh
     ├── go.mod
     ├── banners/
     │   ├── standard.txt
@@ -44,28 +47,48 @@
 
 
 ## Usage
-### How to Run
 1. Clone this repository to your local machine:
    ```bash
-   git clone https://github.com/your-repo/ascii-art-web.git
+   git clone https://01.gritlab.ax/git/mkheirkh/ascii-art-web-dockerize.git
 2. Navigate to the project directory:
     ```bash
-    cd ascii-art-web
+    cd ascii-art-web-dockerize
+### How to Run locally
 3. Ensure you have Go installed (version 1.19+ recommended).
 
 4. Run the application:
     ```bash
-    go run ascii-art-web.go
+    go run .
 
 5. Open your browser and navigate to http://localhost:8080
+
+### How to Run on Docker
+3. Ensure Docker is running.
+
+4. Dockerize:
+* run using bash file:
+    ```bash
+    bash build_image_container.sh
+* run using this instructions:
+1. choose a <image_name>
+    ```bash
+    docker image build -f Dockerfile -t <image_name> .
+2. choose a <container_name> but use the last <image_name> 
+    ```bash
+    docker container run -p 8080:8080 --detach --name <container_name> <image_name>
+3. to see list of images: 
+    ```bash
+    docker images
+4. to see the list of containers:
+    ```bash
+    docker ps -a
 
 ---
 ## Instructions
 1. Enter text into the input field on the homepage.
-2. Select a banner using the radio buttons.
+2. Select a banner from select dropdown.
 3. Click the "Generate" button to create ASCII art.
 4. View the ASCII art output on the page.
-5. For multi-line input, separate lines with \n.
 
 ---
 ## Implementation Details: Algorithm
@@ -113,7 +136,7 @@ The ASCII art rendering process involves the following steps:
     * Correct status codes for different routes and scenarios.
     * Valid response generation for specific inputs and banners.
     * Proper error handling for invalid inputs and requests.
-
+  
 ---
 ## Authors
 - Mohammad mahdi Kheirkhah

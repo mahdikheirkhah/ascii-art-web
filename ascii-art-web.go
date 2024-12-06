@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"fmt"
 	"html/template"
 	"log"
@@ -8,31 +9,39 @@ import (
 	"strings"
 )
 
-// Define a struct to hold page variables
+// PageVariables holds data to be passed to HTML templates
 type PageVariables struct {
-	Response string
-	Input    string
+	Response       string
+	Input          string
+	SelectedBanner string
+	SpecialTrigger bool
 }
 
+// main starts the HTTP server and registers routes
 func main() {
-	fmt.Println("Server is running on http://localhost:8080")
 	fs := http.FileServer(http.Dir("./static"))
 	http.Handle("/static/", http.StripPrefix("/static/", fs))
-	http.HandleFunc("/", GetHandler)
+	// Register route handlers
+	http.HandleFunc("/", GetHandler) // Define the route and its handler function
 	http.HandleFunc("/ascii-art", PostHandler)
-	http.ListenAndServe(":8080", nil)
+	//start the server on port 8080
+	log.Println("Starting server on: http://localhost:8080")
+	log.Println("Status ok: ", http.StatusOK)
+	if err := http.ListenAndServe(":8080", nil); err != nil {
+		log.Fatal(err)
+	}
 }
 
-// homePage serves the main HTML page
+// GetHandler handles GET requests and serves the main page
 func GetHandler(w http.ResponseWriter, r *http.Request) {
 	fmt.Println(r.URL.Path)
-	if r.Method != http.MethodGet {
-		//http.Error(w, "Bad Request", http.StatusBadRequest) // 400
-		badRequest(w)
+	if r.Method != http.MethodGet { // Ensure the method is GET
+		badRequestError(w)
 		return
 	}
+	// If not "http://localhost:8080"
 	if r.URL.Path != "/" {
-		notFound(w)
+		notFoundError(w)
 		return
 	}
 	tmpl, err := template.ParseFiles("templates/index.html")
@@ -40,21 +49,25 @@ func GetHandler(w http.ResponseWriter, r *http.Request) {
 		internalServerError(w)
 		return
 	}
-	w.WriteHeader(http.StatusOK) // 200
+	// Render the template safely with status 200
 	log.Printf("Response Status: %d\n", http.StatusOK)
-	tmpl.ExecuteTemplate(w, "index.html", nil)
+	err = safeRenderTemplate(w, tmpl, "index.html", http.StatusOK, nil)
+	if err != nil {
+		internalServerError(w)
+		return
+	}
 }
 
-// handleAsciiArt processes the POST request to generate ASCII art
+// PostHandler handles POST requests to generate ASCII art
 func PostHandler(w http.ResponseWriter, r *http.Request) {
 	fmt.Println(r.URL.Path)
+
 	if r.Method != http.MethodPost {
-		//http.Error(w, "Bad Request", http.StatusBadRequest) // 400
-		badRequest(w)
+		badRequestError(w)
 		return
 	}
-	if !(r.URL.Path == "/" || r.URL.Path == "/ascii-art") {
-		notFound(w)
+	if r.URL.Path != "/ascii-art" {
+		notFoundError(w)
 		return
 	}
 	tmpl, err := template.ParseFiles("templates/index.html")
@@ -62,55 +75,97 @@ func PostHandler(w http.ResponseWriter, r *http.Request) {
 		internalServerError(w)
 		return
 	}
+	// Read user input and banner selection
 	r.ParseForm()
 	inputText := r.FormValue("inputField")
-	banner := "banners/"
-	banner += r.FormValue("banner")
+	banner := r.FormValue("banner")
+	var vars PageVariables
+	log.Println("User input is: ", inputText, "Selected banner is: ", banner)
+	// Generate ASCII art
 	response := AsciiArt(inputText, banner)
-	if strings.HasPrefix(response, "Error reading file:") { // Example error check
-		//http.Error(w, response, http.StatusNotFound) // 404
-		notFound(w)
-		return
-	}
-	if response == "Invalid input" {
-		badRequest(w)
-		return
-	}
-	vars := PageVariables{Response: response, Input: inputText}
-	w.WriteHeader(http.StatusOK) // 200
-	log.Printf("Response Status: %d\n", http.StatusOK)
-	tmpl.Execute(w, vars)
-}
 
-func notFound(w http.ResponseWriter) {
-	log.Printf("Response Status: %d\n", http.StatusNotFound)
-	w.WriteHeader(http.StatusNotFound)
-	tmpl, err := template.ParseFiles("templates/notFound.html")
+	// Handle errors from AsciiArt function
+	validBanners := map[string]bool{
+		"standard.txt":   true,
+		"shadow.txt":     true,
+		"thinkertoy.txt": true,
+	}
+	if strings.HasPrefix(response, "Error reading file:") {
+		if validBanners[banner] {
+			internalServerError(w)
+		} else {
+			notFoundError(w)
+		}
+		return
+	}
+	if strings.HasPrefix(response, "Invalid characters") {
+		vars = PageVariables{Response: response, Input: "\n" + inputText, SelectedBanner: banner, SpecialTrigger: true}
+	} else {
+		vars = PageVariables{Response: response, Input: "\n" + inputText, SelectedBanner: banner, SpecialTrigger: false}
+	}
+	// Render the template with ASCII art
+	//vars = PageVariables{Response: response, Input: inputText, SelectedBanner: banner}
+	log.Printf("Response Status: %d\n", http.StatusOK)
+	err = safeRenderTemplate(w, tmpl, "index.html", http.StatusOK, vars)
 	if err != nil {
 		internalServerError(w)
 		return
 	}
-	tmpl.ExecuteTemplate(w, "notFound.html", nil)
 }
 
-func badRequest(w http.ResponseWriter) {
+// badRequestError serves a 400 error page
+func badRequestError(w http.ResponseWriter) {
 	log.Printf("Response Status: %d\n", http.StatusBadRequest)
-	w.WriteHeader(http.StatusBadRequest)
 	tmpl, err := template.ParseFiles("templates/badRequest.html")
 	if err != nil {
+		http.Error(w, "Bad request", http.StatusBadRequest)
+		return
+	}
+	err = safeRenderTemplate(w, tmpl, "badRequest.html", http.StatusBadRequest, nil)
+	if err != nil {
 		internalServerError(w)
 		return
 	}
-	tmpl.ExecuteTemplate(w, "badRequest.html", nil)
 }
 
-func internalServerError(w http.ResponseWriter) {
-	log.Printf("Response Status: %d\n", http.StatusInternalServerError)
-	w.WriteHeader(http.StatusInternalServerError)
-	tmpl, err := template.ParseFiles("templates/internalServer.html")
+// notFoundError serves a 404 error page
+func notFoundError(w http.ResponseWriter) {
+	log.Printf("Response Status: %d\n", http.StatusNotFound)
+	tmpl, err := template.ParseFiles("templates/notFound.html")
 	if err != nil {
-		http.Error(w, "Internal Server Error", http.StatusInternalServerError) // 500
+		http.Error(w, "Not Found", http.StatusNotFound)
 		return
 	}
-	tmpl.ExecuteTemplate(w, "internalServer.html", nil)
+	err = safeRenderTemplate(w, tmpl, "notFound.html", http.StatusNotFound, nil)
+	if err != nil {
+		internalServerError(w)
+		return
+	}
+}
+
+// internalServerError serves a 500 error page
+func internalServerError(w http.ResponseWriter) {
+	log.Printf("Response Status: %d\n", http.StatusInternalServerError)
+	tmpl, err := template.ParseFiles("templates/internalServer.html")
+	if err != nil {
+		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+		return
+	}
+	err = safeRenderTemplate(w, tmpl, "internalServer.html", http.StatusInternalServerError, nil)
+	if err != nil {
+		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+		return
+	}
+}
+
+// safeRenderTemplate renders a template safely and writes to the response
+func safeRenderTemplate(w http.ResponseWriter, tmpl *template.Template, templateName string, status int, data any) error {
+	var buffer bytes.Buffer
+	err := tmpl.ExecuteTemplate(&buffer, templateName, data)
+	if err != nil {
+		return err
+	}
+	w.WriteHeader(status)
+	buffer.WriteTo(w)
+	return nil
 }

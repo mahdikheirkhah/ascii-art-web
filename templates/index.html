@@ -3,25 +3,51 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title text-align=center>ASCII ART WEB</title>
-    <link href = "/static/css/styles.css" rel="stylesheet">
+    <title>Ascii-Art-Web</title>
+    <link rel="stylesheet" href="/static/css/styles.css?v=1.0">
 </head>
-<body>
+<body class="{{if .SpecialTrigger}}special-background{{end}}">
     <div id="header">
-        <h1>ASCII ART WEB</h1>
+        <h1>Ascii-Art-Web</h1>
     </div>
-    <div id="form-container">
-        <form action="/ascii-art" method="post">
-            <input type="text" name="inputField" placeholder="Enter text" required>
-            <select name="banner">
-                <option value="standard.txt">Standard</option>
-                <option value="shadow.txt">Shadow</option>
-                <option value="thinkertoy.txt">Thinkertoy</option>
-            </select>
-            <button type="submit">Generate ASCII Art</button>
-        </form>
-    </div>
-    <div id="input">{{.Input}}</div>
+
+    <form action="/ascii-art" method="post" id="form">
+        <span>
+                <label for="banner">Select Style:</label>
+                <select id="banner" name="banner">
+                    <option value="standard.txt" {{if eq .SelectedBanner "standard.txt"}}selected{{end}}>Standard</option>
+                    <option value="shadow.txt" {{if eq .SelectedBanner "shadow.txt"}}selected{{end}}>Shadow</option>
+                    <option value="thinkertoy.txt" {{if eq .SelectedBanner "thinkertoy.txt"}}selected{{end}}>Thinkertoy</option>
+                </select>
+            <span class="icon">ℹ️</span>
+            <span class="info-text">Only printable ASCII-characters are allowed.<br>Pick a font and get creative!</span>
+        </span>
+        <table id="input-table">
+            <tr>
+
+                <td>
+                    <textarea id="inputField" name="inputField" rows="5" cols="30" placeholder="Enter your text here!" required>{{.Input}}</textarea>
+                </td>
+            </tr>
+            <tr>
+                <td class="form-cell" colspan="2">
+                    <div class="button-container">
+                        <button type="submit" class="generate-btn">Generate ASCII Art</button>
+                        <button type="button" class="clear-btn" onclick="clearInput()">Clear</button>
+                    </div>
+                </td>
+            </tr>
+        </table>
+    </form>
     <div id="response">{{.Response}}</div>
+    
+    <script>
+        function clearInput() {
+            document.getElementById("inputField").value = "";
+            document.getElementById("response").innerHTML = ""; 
+            document.body.style.backgroundColor = "#7badf8" ;
+
+        }
+    </script>
 </body>
 </html>
